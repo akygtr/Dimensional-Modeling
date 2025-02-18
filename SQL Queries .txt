@@ -1,0 +1,104 @@
+Calculate Average Stock Price by Sector for a Specific Period:
+(This query calculates the average stock price for each sector and provides aggregations at different levels, such as total and by date)
+
+SELECT 
+    d.Year,
+    d.Month,
+    s.SectorName,
+    AVG(f.Price) AS AveragePrice
+FROM 
+    FACT_STOCK_TRANSACTION f
+JOIN 
+    DIM_DATE d ON f.DateID = d.DateID
+JOIN 
+    DIM_STOCK s ON f.StockID = s.StockID
+WHERE 
+    d.Year = 2024
+GROUP BY 
+    CUBE (d.Year, d.Month, s.SectorName)
+	
+	
+
+Rolling up to get Total Trade Volume by Stock and Date:
+(This query calculates the total volume of trades for each stock and includes rollups for total volume per day, month, and year)
+
+SELECT 
+    d.Date,
+    s.TickerSymbol,
+    SUM(f.Amount) AS TotalVolume
+FROM 
+    FACT_STOCK_TRANSACTION f
+JOIN 
+    DIM_DATE d ON f.DateID = d.DateID
+JOIN 
+    DIM_STOCK s ON f.StockID = s.StockID
+GROUP BY 
+    ROLLUP (d.Date, s.TickerSymbol)
+ORDER BY 
+    d.Date, s.TickerSymbol
+	
+	
+Stock Price Growth After Mergers:
+(This query compares the stock prices before and after a merger, adjusting the share prices accordingly)
+
+SELECT 
+    p.StockID,
+    ca.ActionType,
+    p.DateID,
+    CASE
+        WHEN ca.ActionType = 'Merger' THEN (p.ClosePrice / ca.ShareAdjustment)
+        ELSE p.ClosePrice
+    END AS AdjustedClosePrice
+FROM 
+    FACT_STOCK_PERFORMANCE_DAILY p
+JOIN 
+    DIM_MERGER ca ON p.StockID = ca.StockID
+WHERE 
+    ca.ActionType = 'Merger'
+    AND p.DateID BETWEEN ca.ActionDate AND ca.ActionDate + INTERVAL '30' DAY
+ORDER BY 
+    f.DateID
+	
+	
+Get Market Capitalization by Sector and Exchange:
+(This query calculates the market capitalization (price × volume) by sector, exchange, and time period)
+
+SELECT 
+    d.Year,
+    d.Month,
+    s.SectorName,
+    e.ExchangeName,
+    SUM(f.ClosePrice * f.AverageVolume) AS MarketCapitalization
+FROM 
+    FACT_STOCK_PERFORMANCE_DAILY f
+JOIN 
+    DIM_DATE d ON f.DateID = d.DateID
+JOIN 
+    DIM_STOCK s ON f.StockID = s.StockID
+JOIN 
+    DIM_EXCHANGE e ON f.ExchangeID = e.ExchangeID
+GROUP BY 
+    CUBE (d.Year, d.Month, s.SectorName, e.ExchangeName)
+ORDER BY 
+    d.Year, d.Month, s.SectorName, e.ExchangeName
+	
+	
+	
+Get Adjusted Close Price by Stock for the Last 30 Days:
+(This query uses window functions to calculate the adjusted close price over the past 30 days for each stock)
+
+SELECT 
+    s.TickerSymbol,
+    d.Date,
+    p.ClosePrice,
+    AVG(p.ClosePrice) OVER (PARTITION BY s.StockID ORDER BY p.DateID ROWS BETWEEN 30 PRECEDING AND CURRENT ROW) AS AdjustedClosePriceLast30Days
+FROM 
+    FACT_STOCK_PERFORMANCE_DAILY p
+JOIN 
+	DIM_DATE d ON p.DateID = d.DateID
+JOIN 
+    DIM_STOCK s ON f.StockID = s.StockID
+WHERE 
+    d.Date >= SYSDATE - 30
+ORDER BY 
+    f.DateID DESC
